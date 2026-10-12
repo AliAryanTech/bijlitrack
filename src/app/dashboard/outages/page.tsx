@@ -125,14 +125,24 @@ export default function OutagesPage() {
     // Build HTML content for PDF
     const totalDays = outageHistory.length;
     const totalOutageMins = outageHistory.reduce((s: number, o: any) => s + (o.totalOutageMinutes || 0), 0);
-    const avgPerDay = Math.round(totalOutageMins / totalDays);
-    const feederName = outageHistory[0]?.feederName || 'Unknown';
-    const feederCode = outageHistory[0]?.feederCode || 'N/A';
+    const avgPerDay = totalDays > 0 ? Math.round(totalOutageMins / totalDays) : 0;
+    const escapeHtml = (val: unknown): string => {
+      if (val === null || val === undefined) return '';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    const feederName = escapeHtml(outageHistory[0]?.feederName || 'Unknown');
+    const feederCode = escapeHtml(outageHistory[0]?.feederCode || 'N/A');
 
     const rows = outageHistory.map((o: any) => {
-      const date = new Date(o.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const date = escapeHtml(new Date(o.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
       const totalMins = o.totalOutageMinutes || 0;
-      const hourly = (o.hourlyOutageMinutes || []).map((m: number, i: number) => m > 0 ? `${formatHour12(i)} (${m}m)` : '').filter(Boolean).join(', ');
+      const hourly = escapeHtml((o.hourlyOutageMinutes || []).map((m: number, i: number) => m > 0 ? `${formatHour12(i)} (${m}m)` : '').filter(Boolean).join(', '));
       return `<tr>
         <td style="padding:8px;border:1px solid #ddd;">${date}</td>
         <td style="padding:8px;border:1px solid #ddd;text-align:center;">${formatDur(totalMins)}</td>
@@ -157,7 +167,7 @@ export default function OutagesPage() {
       </style></head><body>
         <h1>⚡ BijliTrack Outage Report</h1>
         <h2>Feeder: ${feederName} (${feederCode})</h2>
-        <p style="color:#666;font-size:12px;">Generated: ${new Date().toLocaleString()} • ${totalDays} days tracked</p>
+        <p style="color:#666;font-size:12px;">Generated: ${escapeHtml(new Date().toLocaleString())} • ${totalDays} days tracked</p>
         
         <div class="stats">
           <div class="stat"><div class="stat-label">Total Outage</div><div class="stat-value">${formatDur(totalOutageMins)}</div></div>
