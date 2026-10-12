@@ -6,6 +6,7 @@ import {
   BillHistory,
   OutageHistory,
 } from '@/lib/server/models';
+import mongoose from 'mongoose';
 import { verifyAuth } from '@/lib/server/auth';
 
 export async function POST(
@@ -17,8 +18,20 @@ export async function POST(
     await connectDB();
 
     const { referenceId } = await params;
+    if (!mongoose.Types.ObjectId.isValid(referenceId)) {
+      return NextResponse.json({ message: 'Invalid reference ID format' }, { status: 400 });
+    }
+
     const body = await req.json();
+    if (JSON.stringify(body).length > 512 * 1024) {
+      return NextResponse.json({ message: 'Payload exceeds allowed limit (512KB)' }, { status: 413 });
+    }
+
     const { consumerInfo, billingInfo, outageInfo } = body;
+
+    if (outageInfo?.days && Object.keys(outageInfo.days).length > 60) {
+      return NextResponse.json({ message: 'Outage history days exceed limit (max 60 days)' }, { status: 400 });
+    }
 
     const reference = await Reference.findOne({ _id: referenceId, userId: authUser.id });
     if (!reference) {

@@ -7,6 +7,7 @@ import {
   OutageHistory,
   AnalysisReport,
 } from '@/lib/server/models';
+import mongoose from 'mongoose';
 import { verifyAuth } from '@/lib/server/auth';
 
 export async function DELETE(
@@ -18,6 +19,9 @@ export async function DELETE(
     await connectDB();
 
     const { id } = await params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return NextResponse.json({ message: 'Invalid reference ID format' }, { status: 400 });
+    }
 
     const reference = await Reference.findOneAndDelete({
       _id: id,

@@ -6,13 +6,19 @@ import { performOutageSync } from '@/lib/server/services/sync.service';
 export const maxDuration = 60; // 60 seconds maximum execution on Vercel Pro/Hobby
 
 export async function GET(req: NextRequest) {
-  // Optional security check if CRON_SECRET is set
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const authHeader = req.headers.get('authorization');
+
   if (cronSecret) {
-    const authHeader = req.headers.get('authorization');
     if (authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
+  } else if (process.env.NODE_ENV === 'production') {
+    console.error('[Cron] CRON_SECRET is unset; refusing to run daily-tracker.');
+    return NextResponse.json(
+      { message: 'Unauthorized: CRON_SECRET is not configured' },
+      { status: 401 }
+    );
   }
 
   const jobStart = Date.now();

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -30,9 +30,14 @@ const authHeader = req.headers.get("authorization");
   try {
     const origin = req.nextUrl.origin;
 
+    const fetchHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (expectedSecret) {
+      fetchHeaders["Authorization"] = `Bearer ${expectedSecret}`;
+    }
+
     const scrapeRes = await fetch(`${origin}/api/tariffs/scrape-update`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: fetchHeaders,
     }).catch((e) => {
       console.warn("[BijliTrack Cron] Warning on scraper endpoint:", e.message);
       return null;
@@ -40,6 +45,7 @@ const authHeader = req.headers.get("authorization");
 
     const auditRes = await fetch(`${origin}/api/audit/batch-validate`, {
       method: "POST",
+      headers: fetchHeaders,
     }).catch((e) => {
       console.warn("[BijliTrack Cron] Warning on audit run:", e.message);
       return null;

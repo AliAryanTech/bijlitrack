@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/server/db';
 import { Reference, BillHistory } from '@/lib/server/models';
+import mongoose from 'mongoose';
 import { verifyAuth } from '@/lib/server/auth';
 
 export async function GET(
@@ -12,6 +13,9 @@ export async function GET(
     await connectDB();
 
     const { referenceId } = await params;
+    if (!mongoose.Types.ObjectId.isValid(referenceId)) {
+      return NextResponse.json({ message: 'Invalid reference ID format' }, { status: 400 });
+    }
 
     const reference = await Reference.findOne({ _id: referenceId, userId: authUser.id });
     if (!reference) {
