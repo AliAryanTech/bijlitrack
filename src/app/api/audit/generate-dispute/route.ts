@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DisputeRequestSchema } from '@/lib/claude/disputeSchema';
 import { generateDispute, isAIConfigured } from '@/lib/ai/provider';
+import { verifyAuth } from '@/lib/server/auth';
+import { checkRateLimit } from '@/lib/server/rateLimit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  let authUser;
+  try {
+    authUser = verifyAuth(req);
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Authentication required to generate dispute notices.' },
+      { status: 401 }
+    );
+  }
+
+  const rateCheck = checkRateLimit(`ai-dispute:${authUser.id}`, 20, 600_000);
+  if (!rateCheck.success) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded. Please wait a few minutes.' },
+      { status: 429 }
+    );
+  }
+
   let raw: unknown;
   try {
     raw = await req.json();

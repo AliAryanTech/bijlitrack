@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isBillMediaType } from '@/lib/claude/billSchema';
 import { parseUtilityBill, isAIConfigured } from '@/lib/ai/provider';
 import { auditBill } from '@/lib/claude/auditEngine';
+import { verifyAuth } from '@/lib/server/auth';
+import { checkRateLimit } from '@/lib/server/rateLimit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -47,6 +49,24 @@ interface ParseRequestBody {
 }
 
 export async function POST(req: NextRequest) {
+  let authUser;
+  try {
+    authUser = verifyAuth(req);
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Authentication required to analyze bills.' },
+      { status: 401 }
+    );
+  }
+
+  const rateCheck = checkRateLimit(`ai-parse:${authUser.id}`, 15, 600_000);
+  if (!rateCheck.success) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded. Please wait a few minutes before analyzing another bill.' },
+      { status: 429 }
+    );
+  }
+
   const declaredLength = req.headers.get('content-length');
   if (declaredLength && Number(declaredLength) > MAX_PAYLOAD_BYTES * BASE64_OVERHEAD) {
     return NextResponse.json(

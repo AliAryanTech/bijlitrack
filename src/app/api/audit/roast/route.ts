@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateRoast, isAIConfigured } from '@/lib/ai/provider';
+import { verifyAuth } from '@/lib/server/auth';
+import { checkRateLimit } from '@/lib/server/rateLimit';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -17,7 +19,13 @@ const RoastRequestSchema = z.object({
     .string()
     .nullish()
     .transform((val) => (val && val.trim().length > 0 ? val.trim() : 'LESCO')),
-  isProtected: z.coerce.boolean().default(false),
+  isProtected: z
+    .union([z.boolean(), z.string()])
+    .transform((val) => {
+      if (typeof val === 'boolean') return val;
+      return val === 'true' || val === '1';
+    })
+    .default(false),
   billingMonth: z
     .string()
     .nullish()
@@ -25,6 +33,24 @@ const RoastRequestSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  let authUser;
+  try {
+    authUser = verifyAuth(req);
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Authentication required to roast bill.' },
+      { status: 401 }
+    );
+  }
+
+  const rateCheck = checkRateLimit(`ai-roast:${authUser.id}`, 20, 600_000);
+  if (!rateCheck.success) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded. Please wait a few minutes.' },
+      { status: 429 }
+    );
+  }
+
   let raw: unknown;
   try {
     raw = await req.json();
