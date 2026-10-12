@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { connectDB } from '@/lib/server/db';
 import { User } from '@/lib/server/models';
 import { isMailConfigured, sendPasswordResetEmail } from '@/lib/server/services/mail.service';
+import { checkRateLimit, getClientIp } from '@/lib/server/rateLimit';
 
 const RESET_TOKEN_EXPIRES_MS = 60 * 60 * 1000;
 
@@ -14,8 +15,18 @@ const getFrontendUrl = (req: NextRequest) => {
   if (process.env.FRONTEND_URL) {
     return process.env.FRONTEND_URL.replace(/\/$/, '');
   }
-  const host = req.headers.get('host') || 'localhost:3000';
-  const proto = req.headers.get('x-forwarded-proto') || 'http';
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, '')}`;
+  }
+
+  // Safe host fallback validation
+  const rawHost = req.headers.get('host') || 'localhost:3000';
+  const isSafeHost = /^(localhost(:\d+)?|127\.0\.0\.1(:\d+)?|[a-zA-Z0-9-]+\.vercel\.app)$/i.test(rawHost);
+  const host = isSafeHost ? rawHost : 'bijlitrack.vercel.app';
+  const proto = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
   return `${proto}://${host}`;
 };
 
@@ -23,6 +34,15 @@ export async function POST(req: NextRequest) {
   const genericMessage = 'If an account exists for this email, a password reset link has been generated.';
 
   try {
+    const ip = getClientIp(req);
+    const rateCheck = checkRateLimit(`forgot-pw:${ip}`, 5, 300_000); // 5 requests per 5 minutes
+    if (!rateCheck.success) {
+      return NextResponse.json(
+        { message: 'Too many password reset attempts. Please wait a few minutes.' },
+        { status: 429 }
+      );
+    }
+
     await connectDB();
     const { email } = await req.json();
 
@@ -30,7 +50,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Email is required' }, { status: 400 });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select(
       '+passwordResetTokenHash +passwordResetExpiresAt'
     );
 
@@ -56,19 +77,19 @@ export async function POST(req: NextRequest) {
       mailSent = true;
     }
 
-    const shouldReturnLink =
-      process.env.RETURN_PASSWORD_RESET_LINK === 'true' ||
-      (process.env.NODE_ENV !== 'production' && !mailSent);
+    // Never return reset token in response. Log locally for developer convenience if email isn't configured
+    if (process.env.NODE_ENV !== 'production' && !mailSent) {
+      console.log('[Dev Notice] Password reset link (email service not configured):', resetUrl);
+    }
 
     return NextResponse.json({
       message: genericMessage,
       emailSent: mailSent,
-      ...(shouldReturnLink ? { resetToken, resetUrl } : {}),
     });
   } catch (error: any) {
     console.error('[Auth Forgot Password Error]', error);
     return NextResponse.json(
-      { message: 'Error creating password reset link', error: error.message },
+      { message: 'Error creating password reset link. Please try again later.' },
       { status: 500 }
     );
   }

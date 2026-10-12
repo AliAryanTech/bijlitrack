@@ -5,6 +5,7 @@ export interface IUser extends Document {
   name: string;
   email: string;
   passwordHash: string;
+  tokenVersion?: number;
   passwordResetTokenHash?: string;
   passwordResetExpiresAt?: Date;
   role: 'user' | 'admin';
@@ -18,6 +19,7 @@ const userSchema = new Schema<IUser>(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     passwordHash: { type: String, required: true },
+    tokenVersion: { type: Number, default: 0 },
     passwordResetTokenHash: { type: String, select: false },
     passwordResetExpiresAt: { type: Date, select: false },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
@@ -28,7 +30,7 @@ const userSchema = new Schema<IUser>(
 // Hash password before saving if modified
 userSchema.pre('save', async function (next) {
   if (!this.isModified('passwordHash')) return next();
-  this.passwordHash = await bcrypt.hash(this.passwordHash, 10);
+  this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
   next();
 });
 

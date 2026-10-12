@@ -7,6 +7,7 @@ const API_BASE_URL = (
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  withCredentials: true,
 });
 
 // Add JWT token in every request
@@ -30,16 +31,15 @@ api.interceptors.request.use(
   }
 );
 
-// Debug API response/errors
+// Debug API response/errors (do not log sensitive response data)
 api.interceptors.response.use(
   (response) => {
-    console.log(`[API Success] ${response.config.url}`, response.data);
     return response;
   },
   (error) => {
     console.error(
       `[API Error] ${error.config?.url}`,
-      error.response?.data || error.message
+      error.response?.data?.message || error.message
     );
 
     return Promise.reject(error);

@@ -36,7 +36,7 @@ export default function SignupPage() {
 
     try {
       const res = await api.post('/auth/signup', { name, email, password });
-      login(res.data.token, res.data.user);
+      login(res.data.user);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to create your account. Try another email.'));
     } finally {

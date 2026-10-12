@@ -15,7 +15,7 @@ interface AuthContextType {
   loading: boolean;
   activeRefId: string | null;
   setActiveRefId: (id: string | null) => void;
-  login: (token: string, userData: User) => void;
+  login: (userDataOrToken: any, userData?: User) => void;
   logout: () => void;
 }
 
@@ -32,47 +32,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (savedRefId) setActiveRefIdState(savedRefId);
 
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        try {
-          const res = await api.get('/auth/me');
-          setUser(res.data);
-        } catch (error: any) {
-          // Only remove token if server explicitly says it's invalid (401)
-          // Don't remove on network errors, timeouts, or server errors (5xx)
-          if (error?.response?.status === 401) {
-            console.error('Token expired or invalid, logging out');
-            localStorage.removeItem('token');
-          } else {
-            console.warn('Auth check failed (network/server error), keeping token. Retrying...', error?.message);
-            // Retry once after a short delay (handles Railway cold starts)
-            try {
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              const retryRes = await api.get('/auth/me');
-              setUser(retryRes.data);
-            } catch (retryError: any) {
-              if (retryError?.response?.status === 401) {
-                localStorage.removeItem('token');
-              } else {
-                // Still failed but token might be valid — try to decode basic info from JWT
-                try {
-                  const payload = JSON.parse(atob(token.split('.')[1]));
-                  // Check if token is expired
-                  if (payload.exp && payload.exp * 1000 > Date.now()) {
-                    setUser({ id: payload.id, name: 'User', email: '' });
-                  } else {
-                    localStorage.removeItem('token');
-                  }
-                } catch {
-                  // Can't decode token, remove it
-                  localStorage.removeItem('token');
-                }
-              }
+      try {
+        const res = await api.get('/auth/me');
+        setUser(res.data);
+      } catch (error: any) {
+        // Only clear user on 401 Unauthorized
+        if (error?.response?.status === 401) {
+          setUser(null);
+          localStorage.removeItem('token');
+        } else {
+          console.warn('Auth check failed (network/server error). Retrying...', error?.message);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            const retryRes = await api.get('/auth/me');
+            setUser(retryRes.data);
+          } catch (retryError: any) {
+            setUser(null);
+            if (retryError?.response?.status === 401) {
+              localStorage.removeItem('token');
             }
           }
         }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initAuth();
@@ -87,13 +70,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = (token: string, userData: User) => {
-    localStorage.setItem('token', token);
+  const login = (first: any, second?: any) => {
+    let userData: User;
+    if (second) {
+      userData = second;
+      if (typeof first === 'string' && first) {
+        localStorage.setItem('token', first);
+      }
+    } else {
+      userData = first;
+    }
     setUser(userData);
     router.push('/dashboard');
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      console.warn('Logout API failed:', e);
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('activeRefId');
     setUser(null);

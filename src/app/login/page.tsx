@@ -35,7 +35,7 @@ export default function LoginPage() {
 
     try {
       const res = await api.post('/auth/login', { email, password });
-      login(res.data.token, res.data.user);
+      login(res.data.user);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Check your email/password and try again.'));
     } finally {

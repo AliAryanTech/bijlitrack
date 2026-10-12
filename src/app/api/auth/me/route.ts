@@ -13,6 +13,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
+    if (
+      authUser.tokenVersion !== undefined &&
+      user.tokenVersion !== undefined &&
+      authUser.tokenVersion !== user.tokenVersion
+    ) {
+      return NextResponse.json(
+        { message: 'Session expired due to password change. Please log in again.' },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json(user);
   } catch (error: any) {
     const status = error.message.includes('Not authorized') ? 401 : 500;
